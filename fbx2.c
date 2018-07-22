@@ -1,24 +1,22 @@
-// Framebuffer-copy-to-two-SPI-screens utility for "Pi Eyes" project.
-// Requires a Raspberry Pi Model A+, B+, Zero, Pi 2 or Pi 3 (older models
-// lack the auxiliary SPI port and will not work).  Uses two RGB screens
+// Framebuffer-copy-to-one-SPI-screens utility modified from "Pi Eyes" project.
+// Requires a Raspberry Pi Model A+, B+, Zero, Pi 2 or Pi 3 ...
+// Uses one RGB screens
 // with SPI interface, either:
 //  - SSD1351 OLED   www.adafruit.com/products/1431  -or-
 //  - ST7789 IPS TFT www.adafruit.com/products/3787
 //  - ST7735 TFT LCD www.adafruit.com/products/2088 ("green tab" version)
 // NOT COMPATIBLE WITH OTHER DISPLAYS, PERIOD.
 
-// Enable both the primary and auxiliary SPI devices in /boot/config.txt
+// Enable the primary SPI devices in /boot/config.txt
 // and enable device tree overlay for the aux port (recent Raspbian Jessie
 // releases include this overlay, but not enabled by default):
 //     dtparam=spi=on
-//     dtparam=spi1=on
-//     dtoverlay=spi1-3cs
 // If a project uses an I2C analog-to-digital converter, also enable that
 // interface in /boot/config.txt:
 //     dtparam=i2c_arm=on
 // Increase the spidev buffer size to 8K by appending to /boot/cmdline.txt:
 //     spidev.bufsiz=8192
-// The latter improves frame rates and avoids some spi1 (2nd eye) glitching!
+// The latter improves frame rates.
 // THE ABOVE STEPS ARE ALL HANDLED BY THE pi-eyes.sh INSTALLER SCRIPT HERE:
 // https://github.com/adafruit/Raspberry-Pi-Installer-Scripts
 
@@ -28,38 +26,28 @@
 // -w ### to specify number of frames between pixel window writes (default 1)
 // -s to print FPS while running (default is silent)
 
-// This code works regardless of screen resolution and aspect ratio, but
-// ideally should be set for 640x480 pixels for 128x128 screens (OLED or
-// TFT), or 1280x720 for 240x240 screens (IPS) for optimal interpolation.
+// This code works regardless of screen resolution and aspect ratio,
+// it is a pixel perfect copy, so whatever your resolution,
+// only the top left starting from 0,0 will be displayed on SPI screen.
 // Do this even if no monitor attached; this still configures the
 // framebuffer.  In /boot/config.txt:
-//     hdmi_force_hotplug=1
-//     hdmi_group=2
-//     hdmi_mode=87
-//     hdmi_cvt=640 480 60 1 0 0 0
-// or
-//     hdmi_cvt=1280 720 60 1 0 0 0
-// (Again, the pi-eyes.sh installer script takes care of this.)
+// ???
+// ???
+// 
+// Do not try to turn disabled the HDMI /usr/bin/tvservice -o),
+// this seems to disable the frame buffer too.
 
 // This code runs in the background for an accompanying eye rendering
 // application.  This separation allows for new and different custom eye
 // renderers to be written in whatever language or library of choice.
 
-// To determine regions copied to each SPI screen: picture the screen
-// divided in half, two equal regions side-by-side.  Centered within each
-// region, a 256x256 pixel square (for OLED and TFT) is scaled to 50%
-// (with 2x2 area filtering) to produce 128x128 bitmaps send to each
-// screen.  For IPS screens, the squares are 480x480 pixels and scaled to
-// 240x240.  The framebuffer size and the eye-rendering code both need
-// some configuration to work properly with all this; it's not entirely
-// automagic (earlier versions tried that, but certain screen sizes caused
-// problems with the dispmanx functions, so it needs to be a little more
-// manual for now).  The 2x2 filtering provides additional antialiasing
-// for OpenGL, which offers at most 4X multisampling (2x2) on Raspberry Pi,
-// so effectively now 16X (4x4).  Don't bother with higher res; this yields
-// lesser quality downsampling!
+// To determine regions copied to each SPI screen: this is the top left,
+// a 128x128 square for OLED and TFT without scaling, pixel perfect.
+// For IPS screens, the squares is 240x240 without scaling.
+// 240x240.
 
 // Written by Phil Burgess / Paint Your Dragon for Adafruit Industries.
+// Simplified for single screen top left pixel perfect by David Glaude
 // MIT license.
 // Insights from Tasanakorn's fbcp tool: github.com/tasanakorn/rpi-fbcp
 
@@ -384,11 +372,13 @@ int main(int argc, char *argv[]) {
 
 	if((eye[0].fd = open("/dev/spidev0.0", O_WRONLY|O_NONBLOCK)) < 0)
 		err(3, "Can't open spidev0.0, is SPI enabled?");
+// DG: We only treat one screen
 //	if((eye[1].fd = open("/dev/spidev1.2", O_WRONLY|O_NONBLOCK)) < 0)
 //		err(4, "Can't open spidev1.2, is spi1-3cs overlay enabled?");
 
 	xfer.speed_hz = bitrate;
 	uint8_t  mode = SPI_MODE_0;
+// DG: We only treat one screen
 //	for(i=0; i<2; i++) {
 	for(i=0; i<1; i++) {
 		ioctl(eye[i].fd, SPI_IOC_WR_MODE, &mode);
@@ -450,7 +440,7 @@ int main(int argc, char *argv[]) {
 
 //	int width  = (info.width  + 1) / 2, // Resource dimensions
 //	    height = (info.height + 1) / 2;
-
+// DG: Make simple 1x1 mapping from top left without trick
 	int width  = info.width, // Same size, Resource dimensions
 	    height = info.height;
 
@@ -461,10 +451,11 @@ int main(int argc, char *argv[]) {
 
 	int x, y,
 	    offset0 = 0;
-
+// DG: Simple 0,0 top left starting point
 //	int x, y,
 //	    offset0 = width * ((height - screen[screenType].height) / 2) +
 //	             (width / 2 - screen[screenType].width) / 2,
+// DG: We only treat one screen
 //	    offset1 = offset0 + width / 2;
 
 	// screen_resource is an intermediary between framebuffer and
@@ -487,16 +478,20 @@ int main(int argc, char *argv[]) {
 
 	// Initialize SPI transfer threads and synchronization barrier
 //	pthread_barrier_init(&barr, NULL, 3);
+// DG: We only treat one screen so one less thread to be waiting for:
 	pthread_barrier_init(&barr, NULL, 2);
 	uint8_t aa = 0;
+// DG: We only treat one screen
 //	uint8_t bb = 1;
 	pthread_create(&eye[0].thread, NULL, spiThreadFunc, &aa);
+// DG: We only treat one screen
 //	pthread_create(&eye[1].thread, NULL, spiThreadFunc, &bb);
 
 	// MAIN LOOP -------------------------------------------------------
 
 	uint32_t  frames=0, t, prevTime = time(NULL);
 	uint16_t *src0, *dst0;
+// DG: We only treat one screen
 //	uint16_t *src1, *dst1;
 	int       winCount = 0,
 	          w = screen[screenType].width,
@@ -515,17 +510,22 @@ int main(int argc, char *argv[]) {
 		// Crop & transfer rects to eye buffers, flip hi/lo bytes
 		j    = 1 - bufIdx; // Render to 'back' buffer
 		src0 = &pixelBuf[offset0];
+// DG: We only treat one screen
 //		src1 = &pixelBuf[offset1];
 		dst0 = eye[0].buf[j];
+// DG: We only treat one screen
 //		dst1 = eye[1].buf[j];
 		for(y=0; y<h; y++) {
 			for(x=0; x<w; x++) {
 				dst0[x] = __builtin_bswap16(src0[x]);
+// DG: We only treat one screen
 //				dst1[x] = __builtin_bswap16(src1[x]);
 			}
 			src0 += width;
+// DG: We only treat one screen
 //			src1 += width;
 			dst0 += w;
+// DG: We only treat one screen
 //			dst1 += w;
 		}
 

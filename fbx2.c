@@ -384,12 +384,13 @@ int main(int argc, char *argv[]) {
 
 	if((eye[0].fd = open("/dev/spidev0.0", O_WRONLY|O_NONBLOCK)) < 0)
 		err(3, "Can't open spidev0.0, is SPI enabled?");
-	if((eye[1].fd = open("/dev/spidev1.2", O_WRONLY|O_NONBLOCK)) < 0)
-		err(4, "Can't open spidev1.2, is spi1-3cs overlay enabled?");
+//	if((eye[1].fd = open("/dev/spidev1.2", O_WRONLY|O_NONBLOCK)) < 0)
+//		err(4, "Can't open spidev1.2, is spi1-3cs overlay enabled?");
 
 	xfer.speed_hz = bitrate;
 	uint8_t  mode = SPI_MODE_0;
-	for(i=0; i<2; i++) {
+//	for(i=0; i<2; i++) {
+	for(i=0; i<1; i++) {
 		ioctl(eye[i].fd, SPI_IOC_WR_MODE, &mode);
 		ioctl(eye[i].fd, SPI_IOC_WR_MAX_SPEED_HZ, bitrate);
 		memcpy(&eye[i].xfer, &xfer, sizeof(xfer));
@@ -447,17 +448,24 @@ int main(int argc, char *argv[]) {
 	// is extremely flexible, not all resolutions will work here, and
 	// it may require some configuration, testing and reboots.
 
-	int width  = (info.width  + 1) / 2, // Resource dimensions
-	    height = (info.height + 1) / 2;
+//	int width  = (info.width  + 1) / 2, // Resource dimensions
+//	    height = (info.height + 1) / 2;
+
+	int width  = info.width, // Same size, Resource dimensions
+	    height = info.height;
 
 	// Also determine positions of upper-left corners for the two
 	// SPI screens, and corresponding offsets into pixelBuf[].
 	// Rendering application will need to observe similar size and
 	// position constraints to produce desired results.
+
 	int x, y,
-	    offset0 = width * ((height - screen[screenType].height) / 2) +
-	             (width / 2 - screen[screenType].width) / 2,
-	    offset1 = offset0 + width / 2;
+	    offset0 = 0;
+
+//	int x, y,
+//	    offset0 = width * ((height - screen[screenType].height) / 2) +
+//	             (width / 2 - screen[screenType].width) / 2,
+//	    offset1 = offset0 + width / 2;
 
 	// screen_resource is an intermediary between framebuffer and
 	// main RAM -- VideoCore will copy the primary framebuffer
@@ -478,15 +486,18 @@ int main(int argc, char *argv[]) {
 	}
 
 	// Initialize SPI transfer threads and synchronization barrier
-	pthread_barrier_init(&barr, NULL, 3);
-	uint8_t aa = 0, bb = 1;
+//	pthread_barrier_init(&barr, NULL, 3);
+	pthread_barrier_init(&barr, NULL, 2);
+	uint8_t aa = 0;
+//	uint8_t bb = 1;
 	pthread_create(&eye[0].thread, NULL, spiThreadFunc, &aa);
-	pthread_create(&eye[1].thread, NULL, spiThreadFunc, &bb);
+//	pthread_create(&eye[1].thread, NULL, spiThreadFunc, &bb);
 
 	// MAIN LOOP -------------------------------------------------------
 
 	uint32_t  frames=0, t, prevTime = time(NULL);
-	uint16_t *src0, *dst0, *src1, *dst1;
+	uint16_t *src0, *dst0;
+//	uint16_t *src1, *dst1;
 	int       winCount = 0,
 	          w = screen[screenType].width,
 	          h = screen[screenType].height;
@@ -504,18 +515,18 @@ int main(int argc, char *argv[]) {
 		// Crop & transfer rects to eye buffers, flip hi/lo bytes
 		j    = 1 - bufIdx; // Render to 'back' buffer
 		src0 = &pixelBuf[offset0];
-		src1 = &pixelBuf[offset1];
+//		src1 = &pixelBuf[offset1];
 		dst0 = eye[0].buf[j];
-		dst1 = eye[1].buf[j];
+//		dst1 = eye[1].buf[j];
 		for(y=0; y<h; y++) {
 			for(x=0; x<w; x++) {
 				dst0[x] = __builtin_bswap16(src0[x]);
-				dst1[x] = __builtin_bswap16(src1[x]);
+//				dst1[x] = __builtin_bswap16(src1[x]);
 			}
 			src0 += width;
-			src1 += width;
+//			src1 += width;
 			dst0 += w;
-			dst1 += w;
+//			dst1 += w;
 		}
 
 		// Sync up all threads; wait for prior transfers to finish

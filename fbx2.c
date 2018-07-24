@@ -247,8 +247,6 @@ static void dcX2(uint8_t x, uint8_t dc) {
 	xfer.tx_buf = (uint32_t)&x; // Uses global xfer struct,
 	xfer.len    = 1;            // as most elements don't change
 	(void)ioctl(eye[0].fd, SPI_IOC_MESSAGE(1), &xfer);
-// DG: We only treat one screen
-//	(void)ioctl(eye[1].fd, SPI_IOC_MESSAGE(1), &xfer);
 }
 
 // Issue a list of commands (and arguments, delays) to both displays:
@@ -373,14 +371,9 @@ int main(int argc, char *argv[]) {
 
 	if((eye[0].fd = open("/dev/spidev0.0", O_WRONLY|O_NONBLOCK)) < 0)
 		err(3, "Can't open spidev0.0, is SPI enabled?");
-// DG: We only treat one screen
-//	if((eye[1].fd = open("/dev/spidev1.2", O_WRONLY|O_NONBLOCK)) < 0)
-//		err(4, "Can't open spidev1.2, is spi1-3cs overlay enabled?");
 
 	xfer.speed_hz = bitrate;
 	uint8_t  mode = SPI_MODE_0;
-// DG: We only treat one screen
-//	for(i=0; i<2; i++) {
 	for(i=0; i<1; i++) {
 		ioctl(eye[i].fd, SPI_IOC_WR_MODE, &mode);
 		ioctl(eye[i].fd, SPI_IOC_WR_MAX_SPEED_HZ, bitrate);
@@ -439,8 +432,6 @@ int main(int argc, char *argv[]) {
 	// is extremely flexible, not all resolutions will work here, and
 	// it may require some configuration, testing and reboots.
 
-//	int width  = (info.width  + 1) / 2, // Resource dimensions
-//	    height = (info.height + 1) / 2;
 // DG: Make simple 1x1 mapping from top left without trick
 	int width  = info.width, // Same size, Resource dimensions
 	    height = info.height;
@@ -453,11 +444,6 @@ int main(int argc, char *argv[]) {
 	int x, y,
 	    offset0 = 0;
 // DG: Simple 0,0 top left starting point
-//	int x, y,
-//	    offset0 = width * ((height - screen[screenType].height) / 2) +
-//	             (width / 2 - screen[screenType].width) / 2,
-// DG: We only treat one screen
-//	    offset1 = offset0 + width / 2;
 
 	// screen_resource is an intermediary between framebuffer and
 	// main RAM -- VideoCore will copy the primary framebuffer
@@ -478,22 +464,14 @@ int main(int argc, char *argv[]) {
 	}
 
 	// Initialize SPI transfer threads and synchronization barrier
-//	pthread_barrier_init(&barr, NULL, 3);
-// DG: We only treat one screen so one less thread to be waiting for:
 	pthread_barrier_init(&barr, NULL, 2);
 	uint8_t aa = 0;
-// DG: We only treat one screen
-//	uint8_t bb = 1;
 	pthread_create(&eye[0].thread, NULL, spiThreadFunc, &aa);
-// DG: We only treat one screen
-//	pthread_create(&eye[1].thread, NULL, spiThreadFunc, &bb);
 
 	// MAIN LOOP -------------------------------------------------------
 
 	uint32_t  frames=0, t, prevTime = time(NULL);
 	uint16_t *src0, *dst0;
-// DG: We only treat one screen
-//	uint16_t *src1, *dst1;
 	int       winCount = 0,
 	          w = screen[screenType].width,
 	          h = screen[screenType].height;
@@ -511,23 +489,13 @@ int main(int argc, char *argv[]) {
 		// Crop & transfer rects to eye buffers, flip hi/lo bytes
 		j    = 1 - bufIdx; // Render to 'back' buffer
 		src0 = &pixelBuf[offset0];
-// DG: We only treat one screen
-//		src1 = &pixelBuf[offset1];
 		dst0 = eye[0].buf[j];
-// DG: We only treat one screen
-//		dst1 = eye[1].buf[j];
 		for(y=0; y<h; y++) {
 			for(x=0; x<w; x++) {
 				dst0[x] = __builtin_bswap16(src0[x]);
-// DG: We only treat one screen
-//				dst1[x] = __builtin_bswap16(src1[x]);
 			}
 			src0 += width;
-// DG: We only treat one screen
-//			src1 += width;
 			dst0 += w;
-// DG: We only treat one screen
-//			dst1 += w;
 		}
 
 		// Sync up all threads; wait for prior transfers to finish

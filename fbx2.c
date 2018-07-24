@@ -247,7 +247,8 @@ static void dcX2(uint8_t x, uint8_t dc) {
 	xfer.tx_buf = (uint32_t)&x; // Uses global xfer struct,
 	xfer.len    = 1;            // as most elements don't change
 	(void)ioctl(eye[0].fd, SPI_IOC_MESSAGE(1), &xfer);
-	(void)ioctl(eye[1].fd, SPI_IOC_MESSAGE(1), &xfer);
+// DG: We only treat one screen
+//	(void)ioctl(eye[1].fd, SPI_IOC_MESSAGE(1), &xfer);
 }
 
 // Issue a list of commands (and arguments, delays) to both displays:
